@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>NexusPlay</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 4rem auto; padding: 0 1rem; }
+    button { font-size: 1rem; padding: 0.5rem 1rem; cursor: pointer; }
+    #out { margin-top: 1rem; padding: 1rem; background: #f3f3f3; border-radius: 8px; min-height: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>NexusPlay</h1>
+  <p>Mini-démo : le frontend appelle le backend via nginx.</p>
+  <button id="ping">Ping backend</button>
+  <pre id="out">…</pre>
+
+  <script>
+    const out = document.getElementById('out');
+    document.getElementById('ping').onclick = async () => {
+      out.textContent = 'loading...';
+      try {
+        const res = await fetch('/api/hello');
+        const data = await res.json();
+        out.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        out.textContent = 'erreur: ' + e.message;
+      }
+    };
+  </script>
+</body>
+</html>

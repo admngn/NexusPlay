@@ -108,9 +108,9 @@ resource "aws_security_group" "backend" {
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description     = "Backend API from nginx"
+    description     = "Backend API replicas (autoscale 2-5) from nginx & frontend"
     from_port       = var.backend_port
-    to_port         = var.backend_port
+    to_port         = var.backend_port + 4
     protocol        = "tcp"
     security_groups = [aws_security_group.nginx.id, aws_security_group.frontend.id]
   }
@@ -156,6 +156,26 @@ resource "aws_instance" "nginx" {
   tags = {
     Name = "nexusplay-nginx"
     Role = "reverse-proxy"
+  }
+}
+
+resource "aws_instance" "nginx2" {
+  ami                         = data.aws_ami.amazon_linux_2023.id
+  instance_type               = var.instance_type
+  subnet_id                   = data.aws_subnets.default.ids[0]
+  vpc_security_group_ids      = [aws_security_group.nginx.id]
+  key_name                    = var.key_name
+  associate_public_ip_address = true
+
+  root_block_device {
+    volume_size = 30
+    volume_type = "gp3"
+    encrypted   = true
+  }
+
+  tags = {
+    Name = "nexusplay-nginx2"
+    Role = "reverse-proxy-backup"
   }
 }
 
