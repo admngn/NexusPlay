@@ -166,13 +166,3 @@ ssh -i 007.pem ec2-user@<BACKEND_IP> 'sudo tail -f /var/log/nexusplay-autoscale.
 git commit -am "test: bump titre" && git push
 ```
 → Onglet Actions GitHub : build → push GHCR → deploy → smoke. ~3min.
-
-## Contraintes & limites assumées
-
-- **AWS Academy Learner Lab** : restreint à la région `us-east-1`, services AWS limités, pas de zones DNS publiques.
-- Pas d'ALB / ASG AWS managés (choix : démontrer LB+autoscaling "DIY" portable hors AWS).
-- BIND9 (critère 10) et Redis (critère 7) restent à intégrer.
-- L'autoscaler maison ne couvre pas la panne d'EC2 (pas de multi-AZ).
-
-## Auteur
-Adame Nianghane — Sup de Vinci
