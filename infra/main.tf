@@ -97,6 +97,22 @@ resource "aws_security_group" "nginx" {
     self        = true
   }
 
+  ingress {
+    description = "DNS BIND9 (UDP queries)"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "DNS BIND9 (TCP queries + zone transfer AXFR)"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0

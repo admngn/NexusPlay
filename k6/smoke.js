@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check } from 'k6';
 
-const URL = __ENV.BASE_URL || 'http://3.84.37.64';
+const URL = __ENV.BASE_URL || 'http://44.202.153.219';
 
 export const options = {
   vus: 3,

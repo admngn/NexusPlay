@@ -1,0 +1,36 @@
+$TTL 300
+@   IN  SOA ns1.nexusplay.local. admin.nexusplay.local. (
+        2026043001  ; serial (YYYYMMDDnn — incrémenter à chaque modif)
+        3600        ; refresh (secondary check primary toutes les 1h)
+        600         ; retry (re-check après échec, 10min)
+        86400       ; expire (zone abandonnée après 24h sans contact primary)
+        300         ; minimum TTL négatif
+)
+
+; ─────────────────────────────────────────────
+; Name Servers
+; ─────────────────────────────────────────────
+@   IN  NS  ns1.nexusplay.local.
+@   IN  NS  ns2.nexusplay.local.
+
+ns1 IN  A   172.31.83.161    ; primary BIND9 = nginx EC2
+ns2 IN  A   172.31.85.185    ; secondary BIND9 = nginx2 EC2
+
+; ─────────────────────────────────────────────
+; Round-robin DNS sur la racine — pattern Active/Backup
+; ─────────────────────────────────────────────
+@           IN  A   44.202.153.219    ; nginx1 public IP
+@           IN  A   13.221.229.161    ; nginx2 public IP
+
+www         IN  CNAME   @
+api         IN  CNAME   @
+
+; ─────────────────────────────────────────────
+; Records internes (résolution interne dans le VPC)
+; ─────────────────────────────────────────────
+nginx       IN  A   172.31.83.161
+nginx2      IN  A   172.31.85.185
+frontend    IN  A   172.31.80.143
+backend     IN  A   172.31.85.135
+prometheus  IN  CNAME   nginx
+grafana     IN  CNAME   nginx
