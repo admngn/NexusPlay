@@ -69,7 +69,7 @@ services:
       - /var/lib/docker:/var/lib/docker:ro
       - /dev/disk:/dev/disk:ro
     ports:
-      - "8081:8080"
+      - "8181:8080"
 
 volumes:
   prometheus_data:

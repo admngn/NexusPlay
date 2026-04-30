@@ -28,9 +28,9 @@ scrape_configs:
   - job_name: cadvisor
     static_configs:
       - targets:
-          - 172.31.83.161:8081  # nginx EC2 host
-          - 172.31.80.143:8081  # frontend EC2 host
-          - 172.31.85.135:8081  # backend EC2 host
+          - 172.31.83.161:8181  # nginx EC2 host
+          - 172.31.80.143:8181  # frontend EC2 host
+          - 172.31.85.135:8181  # backend EC2 host
         labels:
           env: prod
 

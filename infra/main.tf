@@ -57,6 +57,46 @@ resource "aws_security_group" "nginx" {
     cidr_blocks = var.ssh_allowed_cidrs
   }
 
+  ingress {
+    description = "Grafana UI"
+    from_port   = 3001
+    to_port     = 3001
+    protocol    = "tcp"
+    cidr_blocks = var.ssh_allowed_cidrs
+  }
+
+  ingress {
+    description = "Prometheus UI"
+    from_port   = 9090
+    to_port     = 9090
+    protocol    = "tcp"
+    cidr_blocks = var.ssh_allowed_cidrs
+  }
+
+  ingress {
+    description = "Alertmanager UI"
+    from_port   = 9093
+    to_port     = 9093
+    protocol    = "tcp"
+    cidr_blocks = var.ssh_allowed_cidrs
+  }
+
+  ingress {
+    description = "node-exporter scraping (host network on nginx EC2)"
+    from_port   = 9100
+    to_port     = 9100
+    protocol    = "tcp"
+    self        = true
+  }
+
+  ingress {
+    description = "cAdvisor scraping"
+    from_port   = 8181
+    to_port     = 8181
+    protocol    = "tcp"
+    self        = true
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -78,6 +118,22 @@ resource "aws_security_group" "frontend" {
     description     = "Frontend HTTP from nginx"
     from_port       = var.frontend_port
     to_port         = var.frontend_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.nginx.id]
+  }
+
+  ingress {
+    description     = "node-exporter scrape from nginx (Prometheus)"
+    from_port       = 9100
+    to_port         = 9100
+    protocol        = "tcp"
+    security_groups = [aws_security_group.nginx.id]
+  }
+
+  ingress {
+    description     = "cAdvisor scrape from nginx (Prometheus)"
+    from_port       = 8181
+    to_port         = 8181
     protocol        = "tcp"
     security_groups = [aws_security_group.nginx.id]
   }
@@ -113,6 +169,22 @@ resource "aws_security_group" "backend" {
     to_port         = var.backend_port + 4
     protocol        = "tcp"
     security_groups = [aws_security_group.nginx.id, aws_security_group.frontend.id]
+  }
+
+  ingress {
+    description     = "node-exporter scrape from nginx (Prometheus)"
+    from_port       = 9100
+    to_port         = 9100
+    protocol        = "tcp"
+    security_groups = [aws_security_group.nginx.id]
+  }
+
+  ingress {
+    description     = "cAdvisor scrape from nginx (Prometheus)"
+    from_port       = 8181
+    to_port         = 8181
+    protocol        = "tcp"
+    security_groups = [aws_security_group.nginx.id]
   }
 
   ingress {
