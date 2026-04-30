@@ -191,38 +191,141 @@ ssh -i 007.pem ec2-user@<NGINX2_IP> '
 
 Pour mettre à jour la zone : éditer `bind/primary/nexusplay.local.zone`, **incrémenter le serial** dans le SOA, re-pousser, puis `sudo rndc reload` côté primary. Le secondary se synchronise automatiquement (NOTIFY + AXFR).
 
-## Démos rapides à tester
+## Tests & démos
 
-**Load balancing (round-robin entre 3 backends)** — chaque appel doit renvoyer un `hostname` différent :
+> IPs publiques actuelles :
+> - nginx1 : `44.202.153.219`
+> - nginx2 : `13.221.229.161`
+> - frontend : `3.88.174.245`
+> - backend : `34.239.120.50`
+
+### 1. Vue d'ensemble de l'infra
+
 ```bash
-for i in 1 2 3 4 5 6; do curl -s http://44.202.153.219/api/hello | python3 -c "import sys,json; print(json.load(sys.stdin)['hostname'])"; done
+# IPs et état des EC2
+aws ec2 describe-instances \
+  --query 'Reservations[].Instances[].[Tags[?Key==`Name`]|[0].Value,State.Name,PublicIpAddress]' \
+  --output table
+
+# Conteneurs sur chaque EC2
+for ip in 44.202.153.219 13.221.229.161 3.88.174.245 34.239.120.50; do
+  echo "=== $ip ==="
+  ssh -i 007.pem -o StrictHostKeyChecking=no ec2-user@$ip 'sudo docker ps --format "{{.Names}}\t{{.Status}}"'
+done
+
+# Targets Prometheus
+curl -s http://44.202.153.219:9090/api/v1/targets | python3 -c "
+import sys,json
+for t in json.load(sys.stdin)['data']['activeTargets']:
+    print(f\"{t['labels']['job']:<15} {t['labels']['instance']:<25} {t['health']}\")"
 ```
 
-**Autoscaling** — lance le load test, regarde les logs en parallèle :
+### 2. Smoke test (k6 — 20s, exécuté dans le CI)
+
 ```bash
-# Terminal 1
+k6 run --env BASE_URL=http://44.202.153.219 k6/smoke.js
+```
+→ Vérifie p95 < 500ms et error rate < 1%.
+
+### 3. Test de charge (k6 — 2 min)
+
+```bash
 k6 run --env BASE_URL=http://44.202.153.219 k6/load.js
-
-# Terminal 2
-ssh -i 007.pem ec2-user@<BACKEND_IP> 'sudo tail -f /var/log/nexusplay-autoscale.log'
 ```
-→ Tu verras `SCALE UP` quand le CPU dépasse 70%, `SCALE DOWN` quand il redescend.
+→ 30 VUs constants, ~9 000 requêtes, valide les SLO sous charge.
 
-**Pipeline CI/CD** — modifie `services/frontend/index.html`, commit, push :
+### 4. Load balancing applicatif (round-robin entre les backends)
+
 ```bash
-git commit -am "test: bump titre" && git push
+for i in $(seq 1 9); do
+  curl -s http://44.202.153.219/api/hello | python3 -c "import sys,json;print(json.load(sys.stdin)['hostname'])"
+done
 ```
-→ Onglet Actions GitHub : build → push GHCR → deploy → smoke. ~3min.
+→ Doit renvoyer 2 ou 3 `hostname` différents qui alternent (un par container).
 
-**DNS HA — failover BIND9** :
+### 5. Redondance nginx (les 2 nginx servent l'app)
+
+```bash
+echo "=== nginx1 ===" && curl -s http://44.202.153.219/api/hello
+echo "=== nginx2 ===" && curl -s http://13.221.229.161/api/hello
+```
+
+### 6. DNS HA — failover BIND9
+
 ```bash
 # Primary répond
 dig @44.202.153.219 nexusplay.local +short
 
-# Stop primary → secondary continue à répondre
+# Stop primary
 ssh -i 007.pem ec2-user@44.202.153.219 'sudo systemctl stop named'
-dig @13.221.229.161 nexusplay.local +short    # toujours OK
+
+# Primary KO (timeout attendu), secondary répond toujours
+dig @44.202.153.219 nexusplay.local +short +timeout=2
+dig @13.221.229.161 nexusplay.local +short
 
 # Restaurer
 ssh -i 007.pem ec2-user@44.202.153.219 'sudo systemctl start named'
 ```
+
+### 7. Autoscaling (scale-up forcé via CPU saturé)
+
+**Terminal 1** — surveiller l'autoscaler :
+```bash
+ssh -i 007.pem ec2-user@34.239.120.50 'sudo tail -f /var/log/nexusplay-autoscale.log'
+```
+
+**Terminal 2** — saturer le CPU :
+```bash
+ssh -i 007.pem ec2-user@34.239.120.50 'yes > /dev/null & yes > /dev/null & yes > /dev/null &'
+```
+→ Attends ~30-60s, le terminal 1 affiche `SCALE UP → backend-3` puis éventuellement `backend-4`, `backend-5`.
+
+**Arrêter la charge** :
+```bash
+ssh -i 007.pem ec2-user@34.239.120.50 'pkill yes'
+```
+→ Après ~1 min, le terminal 1 affiche `SCALE DOWN` jusqu'au retour à 2 replicas.
+
+### 8. Pipeline CI/CD complet
+
+```bash
+# Modifier un truc visible dans le frontend
+sed -i '' 's/NexusPlay/NexusPlay v3/' services/frontend/index.html
+
+git add services/frontend/index.html
+git commit -m "test: bump v3"
+git push
+
+# Suivre le pipeline (gh CLI requis)
+gh run watch
+
+# Après ~3 min, vérifier le déploiement
+curl -s http://44.202.153.219/ | grep "<title>"
+```
+
+### 9. UIs à ouvrir dans le navigateur
+
+```bash
+open http://44.202.153.219/              # frontend
+open http://44.202.153.219:3001          # Grafana (admin/admin)
+open http://44.202.153.219:9090          # Prometheus
+open http://44.202.153.219:9093          # Alertmanager
+```
+
+### 10. Démo soutenance — séquence "happy path" en 2 min
+
+```bash
+# (1) Vue d'ensemble
+aws ec2 describe-instances --query 'Reservations[].Instances[].[Tags[?Key==`Name`]|[0].Value,State.Name,PublicIpAddress]' --output table
+
+# (2) Microservices + LB applicatif
+for i in $(seq 1 6); do curl -s http://44.202.153.219/api/hello | python3 -c "import sys,json;print(json.load(sys.stdin)['hostname'])"; done
+
+# (3) DNS HA
+dig @44.202.153.219 nexusplay.local +short
+dig @13.221.229.161 nexusplay.local +short
+
+# (4) SLO sous charge
+k6 run --env BASE_URL=http://44.202.153.219 k6/smoke.js
+```
+→ En 2 minutes : infra, microservices, LB, DNS HA, SLO respectés.
