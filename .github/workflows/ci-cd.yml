@@ -1,0 +1,58 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build & push images
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          docker build -t ghcr.io/$OWNER/nexusplay-frontend:latest ./services/frontend
+          docker build -t ghcr.io/$OWNER/nexusplay-backend:latest ./services/backend
+          docker push ghcr.io/$OWNER/nexusplay-frontend:latest
+          docker push ghcr.io/$OWNER/nexusplay-backend:latest
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/key && chmod 600 ~/.ssh/key
+          ssh-keyscan -H ${{ secrets.FRONTEND_HOST }} ${{ secrets.BACKEND_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy frontend
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          ssh -i ~/.ssh/key ec2-user@${{ secrets.FRONTEND_HOST }} "
+            sudo docker pull ghcr.io/$OWNER/nexusplay-frontend:latest &&
+            sudo docker rm -f frontend 2>/dev/null;
+            sudo docker run -d --name frontend --restart unless-stopped -p 3000:3000 ghcr.io/$OWNER/nexusplay-frontend:latest
+          "
+
+      - name: Deploy backend
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          ssh -i ~/.ssh/key ec2-user@${{ secrets.BACKEND_HOST }} "
+            sudo docker pull ghcr.io/$OWNER/nexusplay-backend:latest &&
+            for c in \$(sudo docker ps --filter 'name=^backend-' --format '{{.Names}}'); do
+              port=\$((8079 + \${c#backend-}))
+              sudo docker rm -f \$c
+              sudo docker run -d --name \$c --restart unless-stopped -p \$port:8080 ghcr.io/$OWNER/nexusplay-backend:latest
+            done
+          "
+
+      - name: Smoke test
+        uses: grafana/setup-k6-action@v1
+      - run: k6 run --env BASE_URL=http://${{ secrets.NGINX_HOST }} k6/smoke.js
