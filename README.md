@@ -2,6 +2,9 @@
 
 Plateforme de mini-jeux multijoueurs. Prototype d'architecture microservices haute disponibilité sur AWS, déployée via Terraform, conteneurisée en Docker, observée via Prometheus / Grafana / Alertmanager, déployée en continu via GitHub Actions.
 
+<img width="514" height="497" alt="Capture d’écran 2026-04-30 à 14 43 50" src="https://github.com/user-attachments/assets/94243870-84de-4c74-af90-210caa6062fe" />
+
+
 ## Architecture
 
 ```
