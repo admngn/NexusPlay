@@ -5,9 +5,9 @@ variable "aws_region" {
 }
 
 variable "instance_type" {
-  description = "Type EC2 pour les 3 instances"
+  description = "Type EC2 pour les 3 instances (t4g.micro - ARM64)"
   type        = string
-  default     = "t2.micro"
+  default     = "t4g.micro"
 }
 
 variable "key_name" {
